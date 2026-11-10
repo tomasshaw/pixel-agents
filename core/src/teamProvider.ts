@@ -137,7 +137,8 @@ export interface TeamProvider {
    *  Members the CLI has marked as finished (Claude: `isActive: false`) are excluded, so
    *  completed one-shot teammates despawn via the periodic config scan.
    *
-   *  Claude reads `~/.claude/teams/<teamName>/config.json`'s `members[].name` array.
+   *  Claude reads `<config dir>/teams/<teamName>/config.json`'s `members[].name` array,
+   *  under whichever account's config directory holds the team.
    *  Providers using API-driven team stores implement without a file path. */
   getTeamMembers(teamName: string): Set<string> | null;
 }

@@ -62,6 +62,10 @@ _Avoid_: spawn (that's the character-level visual event), create
 A named filesystem location agents can be launched into. Directories come from two sources: defined by the user in the office, or contributed by the host — VS Code contributes its workspace folders, standalone contributes the directory the server was started from. Host-contributed directories cannot be edited in the office.
 _Avoid_: folder, workspace folder (that's the VS Code-contributed source, not the concept), project
 
+**Account**:
+One login of the CLI that agents can run under. The CLI keeps each login in its own config directory, so an account is a name for one such directory. A Directory may name the account its agents launch under; without one they run under the CLI's default login. The usage bars show one plan per account.
+_Avoid_: profile (that's a character's look), user, config dir (that's where an account lives, not the concept)
+
 **Adopt**:
 Begin tracking a session that was started outside the office. An adopted agent is a full citizen.
 _Avoid_: import, attach

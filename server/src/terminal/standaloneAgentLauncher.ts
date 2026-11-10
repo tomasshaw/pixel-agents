@@ -17,13 +17,14 @@ import * as path from 'path';
 
 import type { HookProvider } from '../../../core/src/provider.js';
 import type { PersistedAgent } from '../../../core/src/schemas.js';
+import { accountForFile } from '../accounts.js';
 import { restoredAgentInit } from '../agentPersistence.js';
 import type { AgentRuntime } from '../agentRuntime.js';
 import { createAgentState } from '../agentState.js';
 import type { AgentStateStore } from '../agentStateStore.js';
 import { JSONL_POLL_INTERVAL_MS } from '../constants.js';
 import { clearContextUsage } from '../contextUsage.js';
-import { directoryAt } from '../directories.js';
+import { directoryAccount, directoryAt } from '../directories.js';
 import { startFileWatching } from '../fileWatcher.js';
 import { directoryNameFor, hostDirectory } from '../hostDirectory.js';
 import { assignPaletteIfNeeded } from '../paletteAssigner.js';
@@ -74,16 +75,24 @@ export function launchStandaloneAgent(
   const cwd = options.directoryPath ?? process.cwd();
   const sessionId = options.resume?.sessionId ?? crypto.randomUUID();
 
+  // The account to run under. A new session takes its Directory's; a resumed
+  // one goes back to the account its transcript is filed under, which is the
+  // only login that can continue it.
+  const account = options.resume
+    ? accountForFile(options.resume.transcript)
+    : directoryAccount(cwd);
+
   const launch = provider.buildLaunchCommand?.(sessionId, cwd, {
     bypassPermissions: options.bypassPermissions,
     resume: options.resume !== undefined,
+    configDir: account?.configDir,
   });
   if (!launch) {
     console.error('[Pixel Agents] Terminal: provider.buildLaunchCommand is not implemented');
     return null;
   }
 
-  const dirs = provider.getSessionDirs?.(cwd) ?? [];
+  const dirs = provider.getSessionDirs?.(cwd, account?.configDir) ?? [];
   if (dirs.length === 0) {
     console.error('[Pixel Agents] Terminal: provider returned no session dirs');
     return null;
@@ -138,7 +147,7 @@ export function launchStandaloneAgent(
       cwd,
       // The locale too (terminalEnv), here as well as in the PTY: a PTY host
       // started by an older server spawns with the env it is handed.
-      env: terminalEnv({ ...inheritedEnv(provider), ...launch.env }),
+      env: terminalEnv(launchEnv(provider, launch)),
       cols: options.cols,
       rows: options.rows,
     });
@@ -158,8 +167,21 @@ export function launchStandaloneAgent(
 
   const pid = session.pid !== null ? ` (pid ${session.pid})` : '';
   const what = options.resume ? `resumed session ${sessionId}` : `spawned ${launch.command}`;
-  console.log(`[Pixel Agents] Terminal: Agent ${id} - ${what}${pid} in ${cwd}`);
+  const as = account ? ` as ${account.name}` : '';
+  console.log(`[Pixel Agents] Terminal: Agent ${id} - ${what}${pid} in ${cwd}${as}`);
   return id;
+}
+
+/** The environment the launch command runs with: this process's (less the
+ *  CLI's session markers and whatever the command says it must not inherit),
+ *  under the command's own variables. */
+function launchEnv(
+  provider: HookProvider,
+  launch: { env?: Record<string, string>; unsetEnv?: string[] },
+): Record<string, string> {
+  const env = inheritedEnv(provider);
+  for (const name of launch.unsetEnv ?? []) delete env[name];
+  return { ...env, ...launch.env };
 }
 
 /**

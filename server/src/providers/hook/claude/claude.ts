@@ -1,5 +1,4 @@
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 
 import { normalizeProjectPath } from '../../../../../core/src/normalizeProjectPath.js';
@@ -15,8 +14,15 @@ import {
 } from './claudeHookInstaller.js';
 import { claudeTeamProvider } from './claudeTeamProvider.js';
 import { claudeUsageBridge } from './claudeUsageBridge.js';
+import {
+  claudeConfigDirs,
+  defaultClaudeConfigDir,
+  inheritedClaudeConfigDir,
+  sameConfigDir,
+} from './configDir.js';
 import { CONSENT_DISCLOSURE, CONSENT_INSTALL_HEADLINE } from './consentCopy.js';
 import {
+  CLAUDE_CONFIG_DIR_ENV,
   CLAUDE_LARGE_CONTEXT_WINDOW,
   CLAUDE_SMALL_CONTEXT_MODEL_PATTERN,
   CLAUDE_SMALL_CONTEXT_WINDOW,
@@ -85,29 +91,32 @@ export function formatToolStatus(toolName: string, input?: unknown): string {
  * its sessions under the resolved path: that comes first, the path as given
  * after it.
  */
-function getSessionDirs(workspacePath: string): string[] {
+function getSessionDirs(workspacePath: string, configDir?: string): string[] {
+  // No account named: the launch inherits this process's environment, so its
+  // sessions land wherever that points.
+  const projectsRoot = path.join(configDir ?? inheritedClaudeConfigDir(), 'projects');
   let resolved = workspacePath;
   try {
     resolved = fs.realpathSync(workspacePath);
   } catch {
     // Missing: only the path as given.
   }
-  const dirs = [sessionDirOf(resolved)];
-  if (resolved !== workspacePath) dirs.push(sessionDirOf(workspacePath));
+  const dirs = [sessionDirOf(resolved, projectsRoot)];
+  if (resolved !== workspacePath) dirs.push(sessionDirOf(workspacePath, projectsRoot));
   return [...new Set(dirs)];
 }
 
-function sessionDirOf(workspacePath: string): string {
-  // Claude stores sessions at ~/.claude/projects/<workspace-path-with-dashes>/.
+function sessionDirOf(workspacePath: string, projectsRoot: string): string {
+  // Claude stores sessions at <config dir>/projects/<workspace-path-with-dashes>/
+  // (the config dir being ~/.claude unless CLAUDE_CONFIG_DIR says otherwise).
   const dirName = normalizeProjectPath(workspacePath);
-  const projectDir = path.join(os.homedir(), '.claude', 'projects', dirName);
+  const projectDir = path.join(projectsRoot, dirName);
 
   // Try exact match first.
   if (fs.existsSync(projectDir)) return projectDir;
 
   // Case-insensitive fallback for Windows: drive letter casing can differ
   // between what VS Code gives us (e.g. "c:\...") and Claude's encoding ("C:\...").
-  const projectsRoot = path.join(os.homedir(), '.claude', 'projects');
   try {
     if (fs.existsSync(projectsRoot)) {
       const lowerDirName = dirName.toLowerCase();
@@ -125,18 +134,51 @@ function sessionDirOf(workspacePath: string): string {
 function buildLaunchCommand(
   sessionId: string,
   cwd: string,
-  opts?: { bypassPermissions?: boolean; resume?: boolean },
-): { command: string; args: string[]; env?: Record<string, string> } {
+  opts?: { bypassPermissions?: boolean; resume?: boolean; configDir?: string },
+): { command: string; args: string[]; env?: Record<string, string>; unsetEnv?: string[] } {
   // A resumed session keeps its id and appends to its old transcript.
   const args = [opts?.resume ? '--resume' : '--session-id', sessionId];
   if (opts?.bypassPermissions) args.push('--dangerously-skip-permissions');
-  return { command: 'claude', args, env: { PWD: cwd } };
+  const account = accountEnv(opts?.configDir);
+  return {
+    command: 'claude',
+    args,
+    env: { PWD: cwd, ...account.env },
+    ...(account.unsetEnv ? { unsetEnv: account.unsetEnv } : {}),
+  };
 }
 
-/** Root that holds every Claude session across all workspaces. Used by the
- *  global session scanner ("Watch All Sessions"). */
+/**
+ * What an account does to the launch environment. The account is the config
+ * directory Claude Code logs in from, but HOW it is named matters: Claude Code
+ * keeps a login made with CLAUDE_CONFIG_DIR set apart from one made without
+ * (another keychain entry, `.claude.json` inside the directory instead of
+ * beside it), even when both point at ~/.claude. So:
+ *
+ * - already the directory this process's environment names: leave it be, in
+ *   the user's own spelling;
+ * - the default directory: the variable is UNSET, which is how the user logs
+ *   into it when they don't export it;
+ * - anything else: set it.
+ */
+function accountEnv(configDir: string | undefined): {
+  env?: Record<string, string>;
+  unsetEnv?: string[];
+} {
+  if (!configDir) return {};
+  const inherited = process.env[CLAUDE_CONFIG_DIR_ENV];
+  if (inherited ? sameConfigDir(inherited, configDir) : false) return {};
+  if (sameConfigDir(configDir, defaultClaudeConfigDir())) {
+    return inherited ? { unsetEnv: [CLAUDE_CONFIG_DIR_ENV] } : {};
+  }
+  return { env: { [CLAUDE_CONFIG_DIR_ENV]: configDir } };
+}
+
+/** Roots that hold every Claude session across all workspaces: one per config
+ *  directory in use (the default, this process's own, each account's). Used by the global
+ *  session scanner ("Watch All Sessions"). */
 function getAllSessionRoots(): string[] {
-  return [path.join(os.homedir(), '.claude', 'projects')];
+  return claudeConfigDirs().map((dir) => path.join(dir, 'projects'));
 }
 
 // ── normalizeHookEvent: the single Claude-specific normalization boundary ──

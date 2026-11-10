@@ -239,6 +239,15 @@ function DirectoryRow({
           <span className="overflow-hidden text-ellipsis" title={directory.path}>
             {directory.name}
           </span>
+          {directory.account !== undefined && (
+            <span
+              data-testid="directory-account"
+              title={`Agents launch under the "${directory.account}" account`}
+              className="shrink-0 text-2xs text-text-muted border-2 border-border pl-4 pr-2 leading-none"
+            >
+              {directory.account}
+            </span>
+          )}
           {directory.source === 'host' && (
             <span
               aria-hidden="true"

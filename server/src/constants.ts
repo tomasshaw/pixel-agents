@@ -203,6 +203,8 @@ export const CONFIG_FILE_NAME = 'config.json';
 
 // ── Usage bars (plan rate limits) ───────────────────────────
 /** The last usage report per provider, in the persistence dir (shared by both surfaces). */
+/** What the office calls the CLI's default login beside named accounts. */
+export const DEFAULT_ACCOUNT_NAME = 'Default';
 export const USAGE_LIMITS_FILE_NAME = 'usage-limits.json';
 /** An unchanged usage report is still passed on (and saved) once this old, so
  *  the office's "updated N min ago" stays true while a session is open. */

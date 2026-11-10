@@ -30,6 +30,7 @@ import {
   searchConversations,
 } from './conversations.js';
 import {
+  directoriesLoadedMessage,
   handleDirectoryClientMessage,
   type HostDirectoryEntry,
   listDirectories,
@@ -140,10 +141,7 @@ function shownHostDirectoriesFor(ctx: ClientMessageContext): HostDirectoryEntry[
 
 /** The drawer's Directories as this client is sent them (shown host entries + the user's). */
 function directoriesMessage(ctx: ClientMessageContext) {
-  return {
-    type: 'directoriesLoaded',
-    directories: listDirectories(shownHostDirectoriesFor(ctx)),
-  } as const;
+  return { ...directoriesLoadedMessage(shownHostDirectoriesFor(ctx)) };
 }
 
 /**

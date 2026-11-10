@@ -403,12 +403,20 @@ export interface UsageBridgeStatus {
   providerName: string;
   installed: boolean;
   disclosure: string;
+  accounts?: UsageAccount[];
   error?: string;
+}
+
+export interface UsageAccount {
+  id?: string;
+  name: string;
 }
 
 export interface UsageLimits {
   type: 'usageLimits';
   providerId: string;
+  accountId?: string;
+  accountName?: string;
   fiveHour?: UsageWindow;
   sevenDay?: UsageWindow;
   updatedAt?: number;
@@ -437,12 +445,14 @@ export interface CardOrderLoaded {
 export interface DirectoriesLoaded {
   type: 'directoriesLoaded';
   directories: Directory[];
+  accounts?: Account[];
 }
 
 export interface Directory {
   name: string;
   path: string;
   source: DirectorySource;
+  account?: string;
   characters?: number[];
   characterOrder?: DirectoryCharacterOrder;
 }
@@ -450,6 +460,11 @@ export interface Directory {
 export type DirectorySource = 'user' | 'host';
 
 export type DirectoryCharacterOrder = 'priority' | 'random';
+
+export interface Account {
+  id: string;
+  name: string;
+}
 
 export interface DirectorySaved {
   type: 'directorySaved';
@@ -675,6 +690,7 @@ export interface SaveDirectory {
   name: string;
   path: string;
   previousPath?: string;
+  account?: string;
   characters?: number[];
   characterOrder?: DirectoryCharacterOrder;
 }

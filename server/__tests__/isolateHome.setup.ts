@@ -11,3 +11,6 @@ import * as path from 'path';
 const isolatedHome = fs.mkdtempSync(path.join(os.tmpdir(), 'pxl-test-home-'));
 process.env.HOME = isolatedHome;
 process.env.USERPROFILE = isolatedHome;
+// A developer's own CLAUDE_CONFIG_DIR would move where the Claude provider
+// looks for sessions, and ride along in the status line script's report.
+delete process.env.CLAUDE_CONFIG_DIR;

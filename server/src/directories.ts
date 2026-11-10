@@ -19,7 +19,8 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import type { Directory } from '../../core/src/messages.js';
+import type { DirectoriesLoaded, Directory } from '../../core/src/messages.js';
+import { accountById, accountsForOffice, type ResolvedAccount } from './accounts.js';
 import {
   readConfig,
   type UserDirectory,
@@ -121,14 +122,29 @@ export function buildDirectoryUnion(
   });
 }
 
-/** A stored user-defined Directory as the office sees it. */
+/** A stored user-defined Directory as the office sees it. An account the
+ *  config no longer lists is left out: the launch runs under the default, and
+ *  the office must not say otherwise. */
 function userDirectory(user: UserDirectory): Directory {
-  return { ...user, source: 'user' };
+  const { account, ...rest } = user;
+  const known = accountById(account)?.id;
+  return { ...rest, ...(known ? { account: known } : {}), source: 'user' };
 }
 
 /** The union for this host, read fresh from the shared config. */
 export function listDirectories(hostDirectories: HostDirectoryEntry[]): Directory[] {
   return buildDirectoryUnion(readConfig().directories, hostDirectories);
+}
+
+/** The `directoriesLoaded` message for this host: the union, and the accounts
+ *  a Directory can be given (left out when none are configured). */
+export function directoriesLoadedMessage(hostDirectories: HostDirectoryEntry[]): DirectoriesLoaded {
+  const accounts = accountsForOffice();
+  return {
+    type: 'directoriesLoaded',
+    directories: listDirectories(hostDirectories),
+    ...(accounts.length > 0 ? { accounts } : {}),
+  };
 }
 
 /**
@@ -143,6 +159,9 @@ export function saveUserDirectory(input: {
   /** Default characters, as sent (validated here). */
   characters?: unknown;
   characterOrder?: unknown;
+  /** Account id, as sent. One the config doesn't list is dropped: the
+   *  Directory then launches under the CLI's default. */
+  account?: unknown;
 }): DirectoryStoreResult {
   const validation = validateDirectoryPath(input.path);
   if (!validation.ok) {
@@ -162,7 +181,11 @@ export function saveUserDirectory(input: {
     const key = normalizeDirectoryPath(entry.path);
     return key !== newKey && key !== previousKey;
   });
-  const stored = withDirectoryCharacters({ name, path: resolvedPath }, input);
+  const account = typeof input.account === 'string' ? accountById(input.account)?.id : undefined;
+  const stored = withDirectoryCharacters(
+    { name, path: resolvedPath, ...(account ? { account } : {}) },
+    input,
+  );
   cfg.directories.push(stored);
 
   if (!writeConfig(cfg)) {
@@ -208,6 +231,19 @@ export function directoryAt(
   );
 }
 
+/**
+ * The account agents launched at `launchPath` run under: the one the
+ * user-defined Directory there names, or undefined (no Directory there, none
+ * named, or one the config no longer lists) — the CLI's default.
+ */
+export function directoryAccount(launchPath: string): ResolvedAccount | undefined {
+  const key = normalizeDirectoryPath(launchPath);
+  const entry = readConfig().directories.find(
+    (directory) => normalizeDirectoryPath(directory.path) === key,
+  );
+  return accountById(entry?.account);
+}
+
 /** What a host must supply to dispatch the Directory client messages. */
 export interface DirectoryMessageDeps {
   /** This host's own contributions, read at dispatch time. */
@@ -246,6 +282,7 @@ export function handleDirectoryClientMessage(
         previousPath: typeof msg.previousPath === 'string' ? msg.previousPath : undefined,
         characters: msg.characters,
         characterOrder: msg.characterOrder,
+        account: msg.account,
       });
       if (!result.ok) {
         deps.reply({ type: 'directoryRejected', path: submittedPath, reason: result.reason });
@@ -288,8 +325,5 @@ export function handleDirectoryClientMessage(
 }
 
 function broadcastDirectories(deps: DirectoryMessageDeps): void {
-  deps.broadcast({
-    type: 'directoriesLoaded',
-    directories: listDirectories(deps.hostDirectories()),
-  });
+  deps.broadcast({ ...directoriesLoadedMessage(deps.hostDirectories()) });
 }
