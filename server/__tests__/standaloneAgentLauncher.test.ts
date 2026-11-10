@@ -103,6 +103,93 @@ describe('launchStandaloneAgent', () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
+  // ── Accounts ─────────────────────────────────────────────────
+
+  describe('under an account', () => {
+    const home = () => process.env.HOME as string;
+    const configFile = () => path.join(home(), '.pixel-agents', 'config.json');
+    const workDir = () => path.join(home(), '.claude_work');
+    let project: string;
+
+    beforeEach(() => {
+      project = path.join(tempDir, 'account-project');
+      fs.mkdirSync(project);
+      fs.mkdirSync(path.dirname(configFile()), { recursive: true });
+      fs.writeFileSync(
+        configFile(),
+        JSON.stringify({
+          accounts: [{ id: 'work', name: 'Work', configDir: workDir() }],
+          directories: [{ name: 'P', path: project, account: 'work' }],
+        }),
+      );
+    });
+
+    afterEach(() => {
+      fs.rmSync(configFile(), { force: true });
+    });
+
+    /** The production session-dir lookup: these tests are about where it looks. */
+    const launchReal = (harness: PtyHarness, options = {}) =>
+      launchStandaloneAgent(
+        { store, runtime, ptyManager: harness.manager, provider: claudeProvider },
+        options,
+      );
+
+    it("launches a Directory's agent under its account, and watches that account's sessions", () => {
+      const harness = workingPtyManager();
+      const id = launchReal(harness, { directoryPath: project });
+      expect(harness.spawnArgs[0].options.env?.CLAUDE_CONFIG_DIR).toBe(workDir());
+      expect(store.get(id!)?.projectDir.startsWith(path.join(workDir(), 'projects'))).toBe(true);
+    });
+
+    it('leaves the environment alone for a Directory with no account', () => {
+      const harness = workingPtyManager();
+      const id = launchReal(harness, { directoryPath: tempDir });
+      expect(harness.spawnArgs[0].options.env).not.toHaveProperty('CLAUDE_CONFIG_DIR');
+      expect(store.get(id!)?.projectDir.startsWith(path.join(home(), '.claude', 'projects'))).toBe(
+        true,
+      );
+    });
+
+    it('resumes under the account the transcript is filed under, whatever the Directory says', () => {
+      const harness = workingPtyManager();
+      const sessionId = '0b8a701c-400d-41ea-801f-40de5e070a8d';
+      const sessions = path.join(workDir(), 'projects', '-somewhere');
+      fs.mkdirSync(sessions, { recursive: true });
+      const transcript = path.join(sessions, `${sessionId}.jsonl`);
+      fs.writeFileSync(transcript, '{"type":"user"}\n');
+
+      // tempDir is a Directory with no account; the transcript decides.
+      launchReal(harness, { directoryPath: tempDir, resume: { sessionId, transcript } });
+      expect(harness.spawnArgs[0].options.env?.CLAUDE_CONFIG_DIR).toBe(workDir());
+    });
+
+    it('unsets an inherited config directory the launch must not keep', () => {
+      const harness = workingPtyManager();
+      process.env.CLAUDE_CONFIG_DIR = workDir();
+      try {
+        launchStandaloneAgent(
+          {
+            store,
+            runtime,
+            ptyManager: harness.manager,
+            provider: provider({
+              buildLaunchCommand: () => ({
+                command: 'claude',
+                args: [],
+                unsetEnv: ['CLAUDE_CONFIG_DIR'],
+              }),
+            }),
+          },
+          { directoryPath: tempDir },
+        );
+      } finally {
+        delete process.env.CLAUDE_CONFIG_DIR;
+      }
+      expect(harness.spawnArgs[0].options.env).not.toHaveProperty('CLAUDE_CONFIG_DIR');
+    });
+  });
+
   // ── Successful launch ────────────────────────────────────────
 
   it('resumes a past session: same id, --resume, its transcript read from the end, its old seat asked for', () => {

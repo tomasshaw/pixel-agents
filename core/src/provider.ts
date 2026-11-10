@@ -114,6 +114,13 @@ export interface UsageBridge {
   refreshScript(packageRoot: string): void;
   /** Validate a report POSTed by the script; null for anything malformed. */
   normalizeReport(raw: unknown): ReportedUsage | null;
+  /** The CLI config directory of the login the report came from (the CLI's
+   *  default when the report names none) — which account the numbers belong
+   *  to. Undefined = this CLI has one login only. */
+  reportConfigDir?(raw: unknown): string;
+  /** The CLI's default config directory: the login a report belongs to when
+   *  it names none. Present whenever `reportConfigDir` is. */
+  defaultConfigDir?(): string;
   /** The reporting session's context from the same POST; null when it
    *  carries none (before the session's first response) or is malformed. */
   normalizeContext(raw: unknown): ReportedContext | null;
@@ -175,11 +182,13 @@ export interface HookProvider {
 
   // ── Optional file fallback (heuristic mode) ──
 
-  /** Session directories to scan. Undefined = no file fallback. */
-  getSessionDirs?(workspacePath: string): string[];
+  /** Session directories to scan. Undefined = no file fallback. `configDir`:
+   *  the CLI config directory of the account the sessions run under; absent =
+   *  the CLI's default. */
+  getSessionDirs?(workspacePath: string, configDir?: string): string[];
   /** Root directories containing every session this provider may have started
-   *  (across all workspaces). Used by global session discovery / "Watch All
-   *  Sessions". Each returned dir contains subdirs whose entries are session
+   *  (across all workspaces, under every configured account). Used by global
+   *  session discovery / "Watch All Sessions". Each returned dir contains subdirs whose entries are session
    *  transcript files. Undefined = this provider doesn't support global scan. */
   getAllSessionRoots?(): string[];
   /** Glob pattern for session files (e.g., '*.jsonl'). */
@@ -190,15 +199,18 @@ export interface HookProvider {
    *  existing session `sessionId` (its transcript) instead of starting one. Only
    *  a provider with `conversationTitle` is asked to resume (the conversation
    *  list is its), and it must honour `resume`: ignoring it would start a new
-   *  session under the old id. */
+   *  session under the old id. `configDir`: run under the account whose CLI
+   *  config directory this is; absent = whatever the environment says. */
   buildLaunchCommand?(
     sessionId: string,
     cwd: string,
-    opts?: { bypassPermissions?: boolean; resume?: boolean },
+    opts?: { bypassPermissions?: boolean; resume?: boolean; configDir?: string },
   ): {
     command: string;
     args: string[];
     env?: Record<string, string>;
+    /** Variables the launch must NOT inherit from the host's environment. */
+    unsetEnv?: string[];
   };
   /** True for an environment variable a running session of this CLI exports to
    *  the processes under it as a marker of THAT session (its id, its socket, a

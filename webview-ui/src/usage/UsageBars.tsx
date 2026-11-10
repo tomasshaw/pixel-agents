@@ -16,6 +16,7 @@ import {
   type UsageBarView,
   usageBarView,
 } from './usageBarView.js';
+import type { UsagePlan } from './usageStore.js';
 
 type BarId = 'weekly' | 'fiveHour';
 
@@ -40,8 +41,9 @@ const FILL: Record<BarId, Record<UsageBarView['level'], string>> = {
 const BAR_NAME: Record<BarId, string> = { weekly: 'Weekly', fiveHour: '5-hour' };
 
 interface UsageBarsProps {
-  /** The last usageLimits for the provider; undefined until the server sends it. */
-  limits: UsageLimits | undefined;
+  /** The plans to draw (usagePlans): one heart and pair of bars each, stacked.
+   *  A plan's limits are undefined until the server sends them. */
+  plans: UsagePlan[];
   /** Whose plan it is, for people (usageBridgeStatus.providerName). */
   providerName: string;
   /** Phone: below the safe area, beside the menu button. */
@@ -97,8 +99,39 @@ function BarRow({ id, view, showReset }: { id: BarId; view: UsageBarView; showRe
  * right of it. On a phone a tap does it instead (a tap elsewhere undoes it),
  * with the reset times below the bars, where the narrow screen has room.
  */
-export function UsageBars({ limits, providerName, mobile }: UsageBarsProps) {
+export function UsageBars({ plans, providerName, mobile }: UsageBarsProps) {
   const now = useNow(USAGE_BAR_TICK_MS);
+  return (
+    <div
+      className={`absolute z-10 flex flex-col items-start gap-6 ${mobile ? 'mobile-safe-top' : 'top-8'}`}
+      style={{ left: USAGE_BARS_LEFT_PX }}
+    >
+      {plans.map((plan) => (
+        <PlanBars
+          key={plan.key}
+          limits={plan.limits}
+          label={plan.label}
+          providerName={providerName}
+          mobile={mobile}
+          now={now}
+        />
+      ))}
+    </div>
+  );
+}
+
+interface PlanBarsProps {
+  limits: UsageLimits | undefined;
+  /** The account's name, shown above its bars; absent with a single plan. */
+  label?: string;
+  providerName: string;
+  mobile: boolean;
+  now: number;
+}
+
+/** One plan's heart and pair of bars (see UsageBars). */
+function PlanBars({ limits, label, providerName, mobile, now }: PlanBarsProps) {
+  const whose = label ? `${providerName} (${label})` : providerName;
   const [active, setActive] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   // Phone: a tap anywhere else closes it again.
@@ -118,10 +151,12 @@ export function UsageBars({ limits, providerName, mobile }: UsageBarsProps) {
   return (
     <div
       ref={rootRef}
-      className={`absolute z-10 flex items-center gap-8 cursor-default ${mobile ? 'mobile-safe-top' : 'top-8'}`}
-      style={{ left: USAGE_BARS_LEFT_PX }}
-      title={freshnessLabel(limits?.updatedAt, now, providerName)}
-      aria-label={`${providerName} usage. Weekly: ${weekly.percent} left, ${weekly.reset}. 5-hour: ${fiveHour.percent} left, ${fiveHour.reset}.`}
+      data-testid="usage-bars"
+      // Raised while open, so a phone's reset times (below the bars) cover the
+      // next account's bars and not the other way round.
+      className={`relative flex items-center gap-8 cursor-default ${active ? 'z-10' : ''}`}
+      title={freshnessLabel(limits?.updatedAt, now, whose)}
+      aria-label={`${whose} usage. Weekly: ${weekly.percent} left, ${weekly.reset}. 5-hour: ${fiveHour.percent} left, ${fiveHour.reset}.`}
       // A phone's tap also fires the emulated mouseenter, which would cancel
       // the click's toggle, so there only the tap counts.
       onMouseEnter={mobile ? undefined : () => setActive(true)}
@@ -130,6 +165,7 @@ export function UsageBars({ limits, providerName, mobile }: UsageBarsProps) {
     >
       <PixelHeart periodSec={active ? heartBeatPeriodSec(weekly.remaining) : null} />
       <div className="flex flex-col gap-2">
+        {label && <PixelText text={label} shadow className="text-2xs text-text" />}
         <BarRow id="weekly" view={weekly} showReset={showResetBeside} />
         <BarRow id="fiveHour" view={fiveHour} showReset={showResetBeside} />
       </div>

@@ -13,7 +13,12 @@ import type { UsageBridgeStatus, UsageLimits } from '../../../core/src/messages.
 
 export interface UsageEntry {
   status?: UsageBridgeStatus;
+  /** Usage of the CLI's default login (the only kind when the host has no
+   *  accounts configured). */
   limits?: UsageLimits;
+  /** Usage per account, keyed by `accountId`. Which of them are drawn, and
+   *  in what order, is the status's say (usagePlans). */
+  accounts?: Record<string, UsageLimits>;
   /** usageBridgeStatus arrivals so far. */
   seq: number;
 }
@@ -37,7 +42,13 @@ export function handleUsageMessage(msg: { type?: unknown; [key: string]: unknown
   if (msg.type === 'usageLimits') {
     if (typeof msg.providerId === 'string') {
       const limits = msg as unknown as UsageLimits;
-      update(limits.providerId, { ...usageEntry(limits.providerId), limits });
+      const prev = usageEntry(limits.providerId);
+      update(
+        limits.providerId,
+        typeof limits.accountId === 'string'
+          ? { ...prev, accounts: { ...prev.accounts, [limits.accountId]: limits } }
+          : { ...prev, limits },
+      );
     }
     return true;
   }
@@ -55,6 +66,40 @@ export function usageEntry(providerId: string): UsageEntry {
 export function usageProviderId(): string | undefined {
   for (const [id, entry] of entries) if (entry.status) return id;
   return undefined;
+}
+
+/** One plan as the bars draw it: whose it is, and its last known usage. */
+export interface UsagePlan {
+  /** The account id; '' for the CLI's default login. */
+  key: string;
+  /** The account's name, shown above its bars; absent with a single plan. */
+  label?: string;
+  limits: UsageLimits | undefined;
+}
+
+const planLists = new WeakMap<UsageEntry, UsagePlan[]>();
+
+/**
+ * The plans to draw for an entry, in the server's order. The status is the
+ * authority on WHICH: it lists the plans (usageBridgeStatus.accounts), and
+ * usage held for anything it doesn't list — an account since removed from the
+ * host's config — is not drawn. Without a list there is one unlabelled plan.
+ * The same array until a message changes the entry.
+ */
+export function usagePlans(entry: UsageEntry): UsagePlan[] {
+  let plans = planLists.get(entry);
+  if (!plans) {
+    const listed = entry.status?.accounts;
+    plans = listed
+      ? listed.map((plan) => ({
+          key: plan.id ?? '',
+          label: plan.name,
+          limits: plan.id === undefined ? entry.limits : entry.accounts?.[plan.id],
+        }))
+      : [{ key: '', limits: entry.limits }];
+    planLists.set(entry, plans);
+  }
+  return plans;
 }
 
 /** Whether a request sent at `sentAtSeq` (null = none) still awaits its answer. */

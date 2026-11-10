@@ -47,9 +47,9 @@ import {
   writeConfig,
 } from '../../server/src/configPersistence.js';
 import {
+  directoriesLoadedMessage,
   handleDirectoryClientMessage,
   type HostDirectoryEntry,
-  listDirectories,
 } from '../../server/src/directories.js';
 import { collectDirectorySuggestions } from '../../server/src/directorySuggestions.js';
 import { setDirectoryNameResolver, setTerminalAdapter } from '../../server/src/fileWatcher.js';
@@ -258,10 +258,7 @@ export class PixelAgentsViewProvider implements vscode.WebviewViewProvider {
   /** Send the current union (user-defined + shown workspace folders) to the
    *  office. Also the success signal for a Directory mutation. */
   private sendDirectories(): void {
-    this.sendOrBuffer({
-      type: 'directoriesLoaded',
-      directories: listDirectories(this.shownHostDirectories()),
-    });
+    this.sendOrBuffer({ ...directoriesLoadedMessage(this.shownHostDirectories()) });
   }
 
   private initServer(): void {

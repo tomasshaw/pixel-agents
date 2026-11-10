@@ -2,7 +2,14 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 
 import type { UsageBridgeStatus, UsageLimits } from '../../../core/src/messages.js';
 import { transport } from '../transport/index.js';
-import { awaitingAnswer, subscribeUsage, usageEntry, usageProviderId } from './usageStore.js';
+import {
+  awaitingAnswer,
+  subscribeUsage,
+  usageEntry,
+  type UsagePlan,
+  usagePlans,
+  usageProviderId,
+} from './usageStore.js';
 
 export interface UsageBridge {
   /** Install state; undefined until the server says (and forever on a host
@@ -10,6 +17,9 @@ export interface UsageBridge {
   status: UsageBridgeStatus | undefined;
   /** The last known plan usage. */
   limits: UsageLimits | undefined;
+  /** The plans the bars draw: one per account the host has configured, or a
+   *  single unlabelled one. */
+  plans: UsagePlan[];
   /** THIS caller's request was sent and no status has arrived since. */
   pending: boolean;
   /** Install or remove the bridge; pending until the next status arrives. */
@@ -42,6 +52,7 @@ export function useUsageBridge(
   return {
     status: entry.status,
     limits: entry.limits,
+    plans: usagePlans(entry),
     pending,
     setEnabled: (enabled) => {
       if (id === undefined) return;

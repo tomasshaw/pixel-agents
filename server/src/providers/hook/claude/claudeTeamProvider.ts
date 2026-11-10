@@ -1,8 +1,8 @@
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 
 import type { SpawnNotice, TeamProvider } from '../../../../../core/src/teamProvider.js';
+import { claudeConfigDirs } from './configDir.js';
 import { CLAUDE_SUBAGENT_TOOLS } from './constants.js';
 
 /**
@@ -338,13 +338,17 @@ export const claudeTeamProvider: TeamProvider = {
   },
 
   getTeamMembers(teamName) {
-    const configPath = path.join(os.homedir(), '.claude', 'teams', teamName, 'config.json');
-    let raw: string;
-    try {
-      raw = fs.readFileSync(configPath, 'utf-8');
-    } catch {
-      return null; // config missing / unreadable -> team dissolved
+    // A team lives under the config directory of the account that created it.
+    let raw: string | undefined;
+    for (const configDir of claudeConfigDirs()) {
+      try {
+        raw = fs.readFileSync(path.join(configDir, 'teams', teamName, 'config.json'), 'utf-8');
+        break;
+      } catch {
+        // Not under this account.
+      }
     }
+    if (raw === undefined) return null; // config missing / unreadable -> team dissolved
     try {
       const data = JSON.parse(raw) as { members?: Array<{ name?: unknown; isActive?: unknown }> };
       if (!Array.isArray(data.members)) return null;

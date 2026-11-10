@@ -11,8 +11,9 @@
  * 2. Report Claude Code's subscription rate limits, and this session's context
  *    share, to every live Pixel Agents server. ONLY `rate_limits`, the
  *    `session_id` and the context window's `used_percentage` and
- *    `context_window_size` are sent — the rest of the status line input (cwd,
- *    model, cost, transcript path) never leaves this process. With neither
+ *    `context_window_size` are sent, plus this process's CLAUDE_CONFIG_DIR
+ *    (which account the limits belong to) — the rest of the status line input
+ *    (cwd, model, cost, transcript path) never leaves this process. With neither
  *    (before the session's first response) there is no POST at all.
  *
  * The report runs alongside the wrapped command and is bounded by a short
@@ -23,7 +24,7 @@ import { spawn } from 'child_process';
 
 import { USAGE_API_PREFIX } from '../../../../constants.js';
 import { isRecord } from '../../../../serverConfig.js';
-import { STATUSLINE_WRAP_FLAG } from '../constants.js';
+import { CLAUDE_CONFIG_DIR_ENV, STATUSLINE_WRAP_FLAG } from '../constants.js';
 import { liveServers, postToServer } from './serverRegistry.js';
 
 /** Per-server POST timeout: well under any status line refresh. */
@@ -63,7 +64,12 @@ function reportOf(input: string): Record<string, unknown> | null {
       context_window_size: window.context_window_size,
     };
   }
-  return Object.keys(body).length > 0 ? body : null;
+  if (Object.keys(body).length === 0) return null;
+  // Which login this is: Claude Code hands its own environment to the status
+  // line, and a second account is a second CLAUDE_CONFIG_DIR.
+  const configDir = process.env[CLAUDE_CONFIG_DIR_ENV];
+  if (configDir) body.config_dir = configDir;
+  return body;
 }
 
 /** Run the user's status line through the shell, as Claude Code would have,

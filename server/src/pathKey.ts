@@ -1,3 +1,4 @@
+import * as fs from 'fs';
 import * as path from 'path';
 
 /**
@@ -20,6 +21,21 @@ export function toPathKey(p: string): string {
   if (!p) return p;
   const resolved = path.resolve(p);
   return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+}
+
+/**
+ * {@link toPathKey} of where a path really is: symlinks followed and, on a
+ * case-insensitive volume, the case the filesystem holds. Two spellings of one
+ * directory (a symlink to it, another case on APFS) get one key. A path that
+ * doesn't exist keeps its own key.
+ */
+export function toRealPathKey(p: string): string {
+  if (!p) return p;
+  try {
+    return toPathKey(fs.realpathSync.native(p));
+  } catch {
+    return toPathKey(p);
+  }
 }
 
 /** True when both paths point at the same file/directory (case-insensitive on Windows). */

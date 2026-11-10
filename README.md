@@ -129,6 +129,21 @@ A Directory is a folder you launch agents into. Click **+** to open the drawer, 
 
 Your workspace folders (VS Code) or the directory the CLI started in (standalone) are listed too once you turn on **Settings → Show Workspace Folders** or **Show Start Directory**.
 
+### Accounts
+
+If you use more than one Claude Code login (each in its own config directory, selected with `CLAUDE_CONFIG_DIR`), list them in `~/.pixel-agents/config.json`:
+
+```json
+"accounts": [
+  { "id": "main", "name": "Main", "configDir": "~/.claude" },
+  { "id": "work", "name": "Work", "configDir": "~/.claude_work" }
+]
+```
+
+Write each `configDir` exactly as you export it in `CLAUDE_CONFIG_DIR` (a leading `~` is fine): Claude Code ties a login to that exact path. An entry that can't be used is reported once in the server's log.
+
+Each Directory then gets an **Account** choice in its settings: agents launched there run under that login, and its conversations are that login's. **Default** leaves the choice to the environment the server was started in. The usage bars show one pair per account, and with **Watch All Sessions** on, sessions started in your own terminal are found under any of them. Hooks and the usage bridge are still installed only in `~/.claude/settings.json`, so another account's config directory needs to share that file (for example by symlink) to report in.
+
 ### Characters
 
 Open the roster from the arrow beside **+** and press a character's pencil (or **+ New**) to open the **Characters** view. Dress a character from the wardrobe tabs, recolour any piece, and touch up pixels in the editor; a piece you redraw can be saved as a custom item for the rest of the cast. Nothing changes in the office until you press **Save**. Characters export as a PNG or a config file, and the whole roster as a zip.

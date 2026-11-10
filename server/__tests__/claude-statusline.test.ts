@@ -49,10 +49,14 @@ function writeRegistryEntry(port: number, token: string): void {
   );
 }
 
-function run(stdin: string, args: string[] = []): Promise<{ code: number | null; stdout: string }> {
+function run(
+  stdin: string,
+  args: string[] = [],
+  env: Record<string, string> = {},
+): Promise<{ code: number | null; stdout: string }> {
   return new Promise((resolve) => {
     const child = spawn('node', [SCRIPT, ...args], {
-      env: { ...process.env, HOME: tmpBase, USERPROFILE: tmpBase, COLUMNS: '77' },
+      env: { ...process.env, HOME: tmpBase, USERPROFILE: tmpBase, COLUMNS: '77', ...env },
       stdio: ['pipe', 'pipe', 'pipe'],
       timeout: 5000,
     });
@@ -86,6 +90,18 @@ describe('claude-statusline.js integration', () => {
 
   // Needs `npm run compile` (the bundled script); a loud skip, never a false green.
   const itBuilt = it.skipIf(!fs.existsSync(SCRIPT));
+
+  itBuilt('says which config directory the session runs under, when one is set', async () => {
+    const server = await startRecordingServer();
+    writeRegistryEntry(server.port, 'tok');
+
+    await run(INPUT, [], { CLAUDE_CONFIG_DIR: '/home/me/.claude_work' });
+    server.close();
+
+    expect(JSON.parse(server.received[0].body)).toMatchObject({
+      config_dir: '/home/me/.claude_work',
+    });
+  });
 
   itBuilt("reports the session's context share with the limits, nothing else", async () => {
     const server = await startRecordingServer();

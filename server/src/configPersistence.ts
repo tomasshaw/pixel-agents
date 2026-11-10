@@ -63,6 +63,23 @@ export interface UserDirectory {
   characters?: number[];
   /** Absent = 'priority'. */
   characterOrder?: DirectoryCharacterOrder;
+  /** Id of the account (see `accounts`) its agents launch under. Absent = the
+   *  CLI's own default (whatever the server's environment says). */
+  account?: string;
+}
+
+/**
+ * An account as persisted: one login of the CLI, which keeps each in its own
+ * config directory (Claude Code: CLAUDE_CONFIG_DIR). Hand-edited in
+ * config.json; see accounts.ts for how they are used.
+ */
+export interface StoredAccount {
+  /** Stable key Directories refer to (letters, digits, `_` and `-`). */
+  id: string;
+  /** Name for people. */
+  name: string;
+  /** The CLI's config directory for this login; a leading `~` is the home. */
+  configDir: string;
 }
 
 export interface PixelAgentsConfig {
@@ -80,6 +97,9 @@ export interface PixelAgentsConfig {
   /** User-defined Directories. Machine-wide by decision: a Directory defined
    *  from the phone shows up in VS Code and vice versa. */
   directories: UserDirectory[];
+  /** The CLI logins agents can be launched under. Empty = one implicit
+   *  account, the CLI's default. */
+  accounts: StoredAccount[];
   /** Characters launched most recently, most recent first (profile indices).
    *  Machine-wide like the profiles themselves, so every office's roster
    *  agrees. See recentCharacters.ts. */
@@ -162,11 +182,68 @@ export function parseUserDirectories(raw: unknown): UserDirectory[] {
     if (!entry || typeof entry !== 'object') {
       continue;
     }
-    const { name, path: dirPath } = entry as { name?: unknown; path?: unknown };
+    const {
+      name,
+      path: dirPath,
+      account,
+    } = entry as { name?: unknown; path?: unknown; account?: unknown };
     if (typeof name !== 'string' || typeof dirPath !== 'string' || dirPath.length === 0) {
       continue;
     }
-    out.push(withDirectoryCharacters({ name, path: dirPath }, entry));
+    out.push(
+      withDirectoryCharacters(
+        { name, path: dirPath, ...(isAccountId(account) ? { account } : {}) },
+        entry,
+      ),
+    );
+  }
+  return out;
+}
+
+const ACCOUNT_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
+
+/** Whether a loose value has the shape of an account id. */
+export function isAccountId(value: unknown): value is string {
+  return typeof value === 'string' && ACCOUNT_ID_PATTERN.test(value);
+}
+
+/** Rejections already reported: the config is re-read constantly, and one
+ *  line per mistake is enough. */
+const reportedAccountProblems = new Set<string>();
+
+/** Accounts are only ever written by hand, so an entry that is dropped must
+ *  say so: silently, it would just look like the feature doesn't work. */
+function reportAccountProblem(entry: unknown, why: string): void {
+  const message = `[Pixel Agents] Ignoring account ${JSON.stringify(entry)} in config.json: ${why}`;
+  if (reportedAccountProblems.has(message)) return;
+  reportedAccountProblems.add(message);
+  console.warn(message);
+}
+
+/**
+ * Coerce a loose value into `StoredAccount[]`: entries need a well-formed id
+ * and a config directory; a missing name falls back to the id, and a repeated
+ * id keeps its first entry. Each dropped entry is reported once.
+ */
+export function parseAccounts(raw: unknown): StoredAccount[] {
+  if (!Array.isArray(raw)) return [];
+  const out: StoredAccount[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== 'object') continue;
+    const { id, name, configDir } = entry as { id?: unknown; name?: unknown; configDir?: unknown };
+    if (!isAccountId(id)) {
+      reportAccountProblem(entry, '"id" must be letters, digits, "_" or "-"');
+      continue;
+    }
+    if (typeof configDir !== 'string' || configDir.trim() === '') {
+      reportAccountProblem(entry, '"configDir" must be a path');
+      continue;
+    }
+    if (out.some((account) => account.id === id)) {
+      reportAccountProblem(entry, `the id "${id}" is already taken`);
+      continue;
+    }
+    out.push({ id, name: typeof name === 'string' && name.trim() ? name.trim() : id, configDir });
   }
   return out;
 }
@@ -180,12 +257,16 @@ export function withDirectoryCharacters(
   entry: UserDirectory,
   raw: { characters?: unknown; characterOrder?: unknown },
 ): UserDirectory {
-  const characters = parseDirectoryCharacters(raw.characters);
-  if (characters.length === 0) return { name: entry.name, path: entry.path };
-  const order = parseCharacterOrder(raw.characterOrder);
-  return {
+  const base: UserDirectory = {
     name: entry.name,
     path: entry.path,
+    ...(entry.account ? { account: entry.account } : {}),
+  };
+  const characters = parseDirectoryCharacters(raw.characters);
+  if (characters.length === 0) return base;
+  const order = parseCharacterOrder(raw.characterOrder);
+  return {
+    ...base,
     characters,
     ...(order === 'random' ? { characterOrder: order } : {}),
   };
@@ -241,6 +322,7 @@ function emptyConfig(): PixelAgentsConfig {
     hooksConsent: {},
     hooksEnabled: {},
     directories: [],
+    accounts: [],
     recentCharacters: [],
   };
 }
@@ -262,6 +344,7 @@ export function readConfig(): PixelAgentsConfig {
       hooksConsent: parseHooksConsent(parsed.hooksConsent),
       hooksEnabled: parseHooksEnabled(parsed.hooksEnabled),
       directories: parseUserDirectories(parsed.directories),
+      accounts: parseAccounts(parsed.accounts),
       recentCharacters: Array.isArray(parsed.recentCharacters)
         ? parsed.recentCharacters.filter((v): v is number => Number.isInteger(v) && v >= 0)
         : [],

@@ -1,7 +1,7 @@
 import type { KeyboardEvent } from 'react';
 import { useEffect, useState } from 'react';
 
-import type { DirectoryCharacterOrder } from '../../../core/src/messages.js';
+import type { Account, DirectoryCharacterOrder } from '../../../core/src/messages.js';
 import type { Directory } from '../hooks/useExtensionMessages.js';
 import { DirectoryCharactersField } from './DirectoryCharactersField.js';
 import { Button } from './ui/Button.js';
@@ -15,6 +15,8 @@ export interface DirectoryModalValues {
   /** Default characters for its launches, highest priority first. */
   characters: number[];
   characterOrder: DirectoryCharacterOrder;
+  /** Id of the account its agents launch under; undefined = the CLI's default. */
+  account: string | undefined;
 }
 
 interface DirectoryModalProps {
@@ -31,6 +33,8 @@ interface DirectoryModalProps {
   areas: string[];
   /** Areas already mapped to the Directory being edited. */
   assignedAreas: string[];
+  /** Accounts the host has configured. Empty renders no picker. */
+  accounts: Account[];
   onSubmit: (values: DirectoryModalValues) => void;
   onDelete: () => void;
   onClose: () => void;
@@ -57,6 +61,7 @@ export function DirectoryModal({
   suggestions,
   areas,
   assignedAreas,
+  accounts,
   onSubmit,
   onDelete,
   onClose,
@@ -66,6 +71,7 @@ export function DirectoryModal({
   const [selectedAreas, setSelectedAreas] = useState<string[]>([]);
   const [characters, setCharacters] = useState<number[]>([]);
   const [characterOrder, setCharacterOrder] = useState<DirectoryCharacterOrder>('priority');
+  const [account, setAccount] = useState<string | undefined>(undefined);
 
   // Refill from whatever the modal was opened on. Keyed on isOpen too, so
   // re-opening Add after a cancelled edit starts blank rather than stale.
@@ -76,6 +82,7 @@ export function DirectoryModal({
     setSelectedAreas(assignedAreas);
     setCharacters(editing?.characters ?? []);
     setCharacterOrder(editing?.characterOrder ?? 'priority');
+    setAccount(editing?.account);
     // assignedAreas is derived per render; keying the refill on it would reset
     // the multi-select on every keystroke. Opening the modal is the only moment
     // it should be read.
@@ -91,6 +98,8 @@ export function DirectoryModal({
       areas: selectedAreas,
       characters,
       characterOrder,
+      // Only an account the host still lists: a stale id saves as the default.
+      account: accounts.some((a) => a.id === account) ? account : undefined,
     });
   };
 
@@ -196,6 +205,32 @@ export function DirectoryModal({
                     }`}
                   >
                     {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+        {accounts.length > 0 && (
+          <div data-testid="directory-accounts" className="flex flex-col gap-2">
+            {/* Which login this Directory's agents run under. One is always
+                chosen: Default leaves it to the CLI's own environment. */}
+            <span className="text-xs text-text-muted">Account</span>
+            <div className="flex flex-wrap gap-4">
+              {[{ id: undefined, name: 'Default' }, ...accounts].map((option) => {
+                const selected = option.id === account;
+                return (
+                  <button
+                    key={option.id ?? ''}
+                    onClick={() => setAccount(option.id)}
+                    aria-pressed={selected}
+                    className={`text-sm py-2 px-4 border-2 rounded-none cursor-pointer ${
+                      selected
+                        ? 'bg-accent border-accent text-text'
+                        : 'bg-transparent border-border text-text-muted hover:text-text'
+                    }`}
+                  >
+                    {option.name}
                   </button>
                 );
               })}

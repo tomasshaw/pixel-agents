@@ -15,7 +15,7 @@ import { createAgentState } from '../../server/src/agentState.js';
 import { AgentStateStore } from '../../server/src/agentStateStore.js';
 import { JSONL_POLL_INTERVAL_MS } from '../../server/src/constants.js';
 import { clearContextUsage } from '../../server/src/contextUsage.js';
-import { directoryAt } from '../../server/src/directories.js';
+import { directoryAccount, directoryAt } from '../../server/src/directories.js';
 import {
   ensureProjectScan,
   readNewLines,
@@ -30,12 +30,12 @@ import { sessionMarkersUnset } from '../../server/src/terminal/terminalEnv.js';
 import { cancelPermissionTimer, cancelWaitingTimer } from '../../server/src/timerManager.js';
 import { workspaceDirectories } from './hostDirectories.js';
 
-export function getProjectDirPath(cwd?: string): string {
+export function getProjectDirPath(cwd?: string, configDir?: string): string {
   // Fall back to home directory when no workspace folder is open (common on Linux/macOS
   // when VS Code is launched without a folder). The provider's getSessionDirs already
   // implements the Windows case-insensitive fallback for drive-letter casing.
   const workspacePath = cwd || vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || os.homedir();
-  const dirs = claudeProvider.getSessionDirs?.(workspacePath) ?? [];
+  const dirs = claudeProvider.getSessionDirs?.(workspacePath, configDir) ?? [];
   if (dirs.length === 0) {
     throw new Error('claudeProvider.getSessionDirs returned no directories');
   }
@@ -79,13 +79,29 @@ export async function launchNewTerminal(
   const cwd = directoryPath || folders?.[0]?.uri.fsPath || os.homedir();
   const isMultiRoot = !!(folders && folders.length > 1);
   const idx = nextTerminalIndexRef.current++;
+  // The account a Directory launches under (its CLI config directory); only a
+  // launch the office aimed at a Directory has one.
+  const account = directoryPath === undefined ? undefined : directoryAccount(cwd);
+  const sessionId = crypto.randomUUID();
+  const launch = claudeProvider.buildLaunchCommand?.(sessionId, cwd, {
+    bypassPermissions,
+    configDir: account?.configDir,
+  });
+  if (!launch) {
+    throw new Error('claudeProvider.buildLaunchCommand is not implemented');
+  }
   const terminal = vscode.window.createTerminal({
     name: `${CLAUDE_TERMINAL_NAME_PREFIX} #${idx}`,
     cwd,
     // A VS Code started from inside a CLI session lends that session's markers
     // to every terminal: unset them (null = unset), or the agent runs as a
     // child of that session (Claude Code then saves no transcript).
-    env: sessionMarkersUnset(claudeProvider, process.env),
+    // An account rides in as the launch command's environment (null = unset).
+    env: {
+      ...sessionMarkersUnset(claudeProvider, process.env),
+      ...(account ? launch.env : {}),
+      ...Object.fromEntries((launch.unsetEnv ?? []).map((name) => [name, null])),
+    },
   });
   // When suppressShow is set (auto-spawn + autoShowPanel), keep the panel view
   // on Pixel Agents instead of switching to Terminal. Claude Code still runs
@@ -95,14 +111,9 @@ export async function launchNewTerminal(
     terminal.show();
   }
 
-  const sessionId = crypto.randomUUID();
-  const launch = claudeProvider.buildLaunchCommand?.(sessionId, cwd, { bypassPermissions });
-  if (!launch) {
-    throw new Error('claudeProvider.buildLaunchCommand is not implemented');
-  }
   terminal.sendText([launch.command, ...launch.args].join(' '));
 
-  const projectDir = getProjectDirPath(cwd);
+  const projectDir = getProjectDirPath(cwd, account?.configDir);
 
   // Pre-register expected JSONL file so project scan won't treat it as a /clear file
   const expectedFile = path.join(projectDir, `${sessionId}.jsonl`);

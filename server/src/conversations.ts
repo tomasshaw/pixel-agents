@@ -22,6 +22,7 @@ import {
   NEW_CONVERSATION_TITLE,
   PIXEL_AGENTS_DIR,
 } from './constants.js';
+import { directoryAccount } from './directories.js';
 import { transcriptSuffix } from './directorySuggestions.js';
 import { writeJsonAtomic } from './jsonFileWatcher.js';
 import type { AgentState } from './types.js';
@@ -157,9 +158,11 @@ export function recordConversationLooks(
 }
 
 /** Where a Directory's sessions are filed (the provider knows the CLI's rule,
- *  e.g. a Directory reached through a symlink filed under the resolved path). */
+ *  e.g. a Directory reached through a symlink filed under the resolved path),
+ *  under the account the Directory launches its agents with: its
+ *  conversations are the ones that account can resume. */
 function sessionDirsFor(provider: HookProvider, directoryPath: string): string[] {
-  return provider.getSessionDirs?.(directoryPath) ?? [];
+  return provider.getSessionDirs?.(directoryPath, directoryAccount(directoryPath)?.configDir) ?? [];
 }
 
 /** A session's transcript in the Directory at `directoryPath`, if it exists.

@@ -832,6 +832,15 @@ components:
             What installing writes, what data moves and how to undo it — the
             provider's own copy, shown before the user confirms (paragraphs
             split on blank lines).
+        accounts:
+          type: array
+          description: >-
+            The plans the bars show, in order, when the host has accounts
+            configured: one pair of bars each. Authoritative — a plan not
+            listed is not shown, whatever `usageLimits` arrived for it
+            earlier. Absent = one unlabelled plan.
+          items:
+            $ref: '#/components/schemas/UsageAccount'
         error:
           type: string
           description: Why the last change failed (sent to the asker only).
@@ -852,6 +861,15 @@ components:
           const: usageLimits
         providerId:
           type: string
+        accountId:
+          type: string
+          description: >-
+            The account these numbers belong to (an `id` from the `accounts` in
+            `usageBridgeStatus`). Absent for the CLI's default login, which is
+            the only one when no accounts are configured.
+        accountName:
+          type: string
+          description: That account's name for people.
         fiveHour:
           $ref: '#/components/schemas/UsageWindow'
         sevenDay:
@@ -982,6 +1000,13 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Directory'
+        accounts:
+          type: array
+          description: >-
+            The accounts a Directory can launch its agents under (the host's
+            config). Absent or empty = none configured: no account picker.
+          items:
+            $ref: '#/components/schemas/Account'
 
     DirectorySaved:
       description: |
@@ -1607,6 +1632,11 @@ components:
         previousPath:
           type: string
           description: Path of the entry being edited. Absent when adding.
+        account:
+          type: string
+          description: >-
+            Id of the account its agents launch under. Absent (or unknown to
+            the host) = the CLI's default.
         characters:
           type: array
           description: Default characters (profile indices), highest priority first.
@@ -1785,6 +1815,11 @@ components:
           type: string
         source:
           $ref: '#/components/schemas/DirectorySource'
+        account:
+          type: string
+          description: >-
+            Id of the account agents launched here run under. Absent = the
+            CLI's default.
         characters:
           type: array
           description: >-
@@ -1796,6 +1831,34 @@ components:
             minimum: 0
         characterOrder:
           $ref: '#/components/schemas/DirectoryCharacterOrder'
+
+    UsageAccount:
+      description: |
+        One plan in the usage bars. With an `id` it is a configured account,
+        whose numbers arrive in the `usageLimits` carrying that `accountId`.
+        Without one it is the CLI's default login, whose numbers arrive in the
+        `usageLimits` with no `accountId`.
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+
+    Account:
+      description: |
+        One login of the CLI that agents can be launched under, as configured
+        on the host (`accounts` in ~/.pixel-agents/config.json).
+      type: object
+      additionalProperties: false
+      required: [id, name]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
 
     DirectoryCharacterOrder:
       description: |

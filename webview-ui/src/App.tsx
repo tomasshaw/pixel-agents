@@ -103,6 +103,7 @@ function App() {
     layoutWasReset,
     loadedAssets,
     directories,
+    accounts,
     directoryRejection,
     directorySaved,
     directorySuggestions,
@@ -578,7 +579,7 @@ function App() {
           {/* The provider's plan usage, top-left (Settings → Usage Bars). */}
           {usage.status?.installed && (
             <UsageBars
-              limits={usage.limits}
+              plans={usage.plans}
               providerName={usage.status.providerName}
               mobile={isMobile}
             />
@@ -918,6 +919,7 @@ function App() {
         suggestions={directorySuggestions}
         areas={areaLabels}
         assignedAreas={directoryEditor.assignedAreas}
+        accounts={accounts}
         onSubmit={directoryEditor.submit}
         onDelete={directoryEditor.remove}
         onClose={directoryEditor.close}

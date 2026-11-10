@@ -25,11 +25,7 @@ import { hookProviderById } from './providers/index.js';
 import { registerTerminalRoutes } from './terminal/terminalRoutes.js';
 import type { TerminalSessions } from './terminal/terminalSessions.js';
 import type { AgentState } from './types.js';
-import {
-  PRIVILEGED_BROADCAST_TYPES,
-  recordUsageReport,
-  usageLimitsMessage,
-} from './usageLimits.js';
+import { PRIVILEGED_BROADCAST_TYPES, recordUsageReport } from './usageLimits.js';
 import {
   bearerTokenValid,
   isAllowedWebSocketOrigin,
@@ -199,9 +195,8 @@ function registerUsageRoute(app: FastifyInstance, options: HttpServerOptions): v
     },
     async (request, reply) => {
       const provider = hookProviderById(request.params.providerId);
-      if (provider && recordUsageReport(provider, request.body)) {
-        options.store.broadcast({ ...usageLimitsMessage(provider.id) });
-      }
+      const moved = provider ? recordUsageReport(provider, request.body) : null;
+      if (moved) options.store.broadcast({ ...moved });
       const context = provider?.usageBridge?.normalizeContext(request.body);
       if (context) applyReportedContext(options.store, context);
       reply.send('ok');

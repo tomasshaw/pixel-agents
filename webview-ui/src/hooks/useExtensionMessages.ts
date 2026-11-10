@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import type { Directory, HooksConsentRequest } from '../../../core/src/messages.js';
+import type { Account, Directory, HooksConsentRequest } from '../../../core/src/messages.js';
 import { handleCastMessage } from '../characters/castMessages.js';
 import { castStore } from '../characters/castStore.js';
 import { startOfficeSync } from '../characters/officeSprites.js';
@@ -105,6 +105,9 @@ interface ExtensionMessageState {
   layoutWasReset: boolean;
   loadedAssets?: { catalog: FurnitureAsset[]; sprites: Record<string, string[][]> };
   directories: Directory[];
+  /** The accounts a Directory can launch under (the host's config). Empty =
+   *  none configured, and no account picker anywhere. */
+  accounts: Account[];
   /** Last refused saveDirectory/removeDirectory. The Directory modal shows it
    *  inline. */
   directoryRejection: DirectoryRejection | null;
@@ -203,6 +206,7 @@ export function useExtensionMessages(
     { catalog: FurnitureAsset[]; sprites: Record<string, string[][]> } | undefined
   >();
   const [directories, setDirectories] = useState<Directory[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [directoryRejection, setDirectoryRejection] = useState<DirectoryRejection | null>(null);
   const [directorySaved, setDirectorySaved] = useState<DirectorySaved | null>(null);
   const [directorySuggestions, setDirectorySuggestions] = useState<string[]>([]);
@@ -783,6 +787,7 @@ export function useExtensionMessages(
       } else if (msg.type === 'directoriesLoaded') {
         const directories = msg.directories as Directory[];
         setDirectories(directories);
+        setAccounts(Array.isArray(msg.accounts) ? (msg.accounts as Account[]) : []);
       } else if (msg.type === 'directorySuggestions') {
         setDirectorySuggestions((msg.paths ?? []) as string[]);
       } else if (msg.type === 'directorySaved') {
@@ -951,6 +956,7 @@ export function useExtensionMessages(
     layoutWasReset,
     loadedAssets,
     directories,
+    accounts,
     directoryRejection,
     directorySaved,
     directorySuggestions,

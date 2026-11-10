@@ -13,6 +13,10 @@ export const CLAUDE_HOOK_SCRIPT_NAME = 'claude-hook.js';
  *  runs the user's own status line and reports Claude Code's rate limits. */
 export const CLAUDE_STATUSLINE_SCRIPT_NAME = 'claude-statusline.js';
 
+/** The environment variable that points Claude Code at a config directory
+ *  other than ~/.claude — in effect, at another login. */
+export const CLAUDE_CONFIG_DIR_ENV = 'CLAUDE_CONFIG_DIR';
+
 /** Flag before the base64url-encoded command the bridge wraps. */
 export const STATUSLINE_WRAP_FLAG = '--wrap';
 

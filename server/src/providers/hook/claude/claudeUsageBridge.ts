@@ -19,6 +19,9 @@
  *   "session_id": "…",
  *   "context_window": { "used_percentage": 8, "context_window_size": 200000, … }
  *
+ * The script adds one field of its own, `config_dir`: the CLAUDE_CONFIG_DIR
+ * the session runs under, when set — which login the limits belong to.
+ *
  * `used_percentage` counts input tokens only (input + cache writes + cache
  * reads, no output) and is null early in a session.
  */
@@ -30,6 +33,7 @@ import type {
   UsageBridge,
 } from '../../../../../core/src/provider.js';
 import { isRecord } from '../../../serverConfig.js';
+import { defaultClaudeConfigDir } from './configDir.js';
 import { SETTINGS_BACKUP_SUFFIX } from './constants.js';
 import {
   installStatusLineBridge,
@@ -44,8 +48,9 @@ export const USAGE_BRIDGE_DISCLOSURE = [
     'wraps your status line in ~/.claude/settings.json. It keeps working and looks the same ' +
     '(with no status line, Claude Code hides some footer hints). A one-time backup is saved as ' +
     `settings.json${SETTINGS_BACKUP_SUFFIX}.`,
-  "Only your usage percentages and reset times, and each session's context percentage, are sent, " +
-    'to the Pixel Agents server on this machine.',
+  "Only your usage percentages and reset times, each session's context percentage, and which " +
+    'Claude config directory the session runs under (to tell accounts apart) are sent, to the ' +
+    'Pixel Agents server on this machine.',
   'You can turn this off at any time from Settings → Usage Bars.',
 ].join('\n\n');
 
@@ -83,6 +88,13 @@ export function normalizeClaudeContextReport(raw: unknown): ReportedContext | nu
   return { sessionId, usedPercentage: Math.min(100, Math.max(0, used)), windowTokens: size };
 }
 
+/** The config directory the reporting session runs under: the
+ *  CLAUDE_CONFIG_DIR the status line script adds, else Claude's default. */
+export function claudeReportConfigDir(raw: unknown): string {
+  const dir = isRecord(raw) ? raw.config_dir : undefined;
+  return typeof dir === 'string' && dir.trim() !== '' ? dir : defaultClaudeConfigDir();
+}
+
 export const claudeUsageBridge: UsageBridge = {
   disclosure: USAGE_BRIDGE_DISCLOSURE,
   isInstalled: isStatusLineBridgeInstalled,
@@ -90,5 +102,7 @@ export const claudeUsageBridge: UsageBridge = {
   uninstall: uninstallStatusLineBridge,
   refreshScript: refreshStatusLineScript,
   normalizeReport: normalizeClaudeUsageReport,
+  reportConfigDir: claudeReportConfigDir,
+  defaultConfigDir: defaultClaudeConfigDir,
   normalizeContext: normalizeClaudeContextReport,
 };
